@@ -14,4 +14,8 @@ export interface User {
   registeredAt: string;
   skills?: string[];
   team?: string;
+  securityQuestion1?: string;
+  securityAnswerHash1?: string;
+  securityQuestion2?: string;
+  securityAnswerHash2?: string;
 }

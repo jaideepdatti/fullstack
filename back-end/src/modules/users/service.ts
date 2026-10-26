@@ -2,6 +2,22 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
+
+const SECURITY_QUESTIONS = ['first_school', 'childhood_friend', 'first_pet', 'birth_city'];
+const normalizeAnswer = (answer: string) => answer.normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
+const hashAnswer = (answer: string) => {
+  const salt = randomBytes(16);
+  return `${salt.toString('hex')}:${scryptSync(normalizeAnswer(answer), salt, 32).toString('hex')}`;
+};
+const answerMatches = (answer: string, stored?: string) => {
+  if (!stored) return false;
+  const [saltHex, hashHex] = stored.split(':');
+  if (!saltHex || !hashHex) return false;
+  const expected = Buffer.from(hashHex, 'hex');
+  const actual = scryptSync(normalizeAnswer(answer), Buffer.from(saltHex, 'hex'), expected.length);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+};
 
 const ROLE_DASHBOARDS: Record<string, string> = {
   superuser: 'platform-admin.html',
@@ -106,6 +122,10 @@ export class UsersService {
     // Check for duplicate email
     const existing = this.users.find((u) => u.email === dto.email);
     if (existing) throw new BadRequestException(`User with email '${dto.email}' already exists`);
+    const hasRecoveryDetails = dto.securityQuestion1 || dto.securityQuestion2 || dto.securityAnswer1 || dto.securityAnswer2;
+    if (hasRecoveryDetails && (!SECURITY_QUESTIONS.includes(dto.securityQuestion1 || '') || !SECURITY_QUESTIONS.includes(dto.securityQuestion2 || '') || dto.securityQuestion1 === dto.securityQuestion2 || !dto.securityAnswer1?.trim() || !dto.securityAnswer2?.trim())) {
+      throw new BadRequestException('Choose two different security questions and provide both answers.');
+    }
 
     const initials = (dto.name || '')
       .split(' ')
@@ -128,6 +148,7 @@ export class UsersService {
       bio: dto.bio,
       skills: dto.skills,
       registeredAt: new Date().toISOString(),
+      ...(hasRecoveryDetails ? { securityQuestion1: dto.securityQuestion1, securityAnswerHash1: hashAnswer(dto.securityAnswer1!), securityQuestion2: dto.securityQuestion2, securityAnswerHash2: hashAnswer(dto.securityAnswer2!) } : {}),
     };
 
     this.users.push(newUser);
@@ -162,5 +183,32 @@ export class UsersService {
     return this.users.find(
       (u) => u.email === email && u.password === password && u.role === role,
     ) || null;
+  }
+
+  recoverPassword(input: { email: string; role: string; securityAnswer1: string; securityAnswer2: string; newPassword: string }): void {
+    const user = this.users.find((candidate) => candidate.email.toLowerCase() === input.email.trim().toLowerCase() && candidate.role === input.role);
+    if (!user || !answerMatches(input.securityAnswer1, user.securityAnswerHash1) || !answerMatches(input.securityAnswer2, user.securityAnswerHash2)) {
+      throw new BadRequestException('Account details or security answers do not match. Your password has not changed.');
+    }
+    if (input.newPassword.length < 8) throw new BadRequestException('Password must be at least 8 characters.');
+    user.password = input.newPassword;
+  }
+
+  recoveryQuestions(email: string, role: string): string[] {
+    const user = this.users.find((candidate) => candidate.email.toLowerCase() === email.trim().toLowerCase() && candidate.role === role && candidate.securityQuestion1 && candidate.securityQuestion2);
+    if (!user) throw new BadRequestException('No recovery questions are available for those account details. Check your email and role, or contact support.');
+    return [user.securityQuestion1!, user.securityQuestion2!];
+  }
+
+  setRecoveryQuestions(id: string, email: string, role: string, input: { securityQuestion1: string; securityAnswer1: string; securityQuestion2: string; securityAnswer2: string }): void {
+    const user = this.users.find((candidate) => candidate.id === id && candidate.email.toLowerCase() === email.trim().toLowerCase() && candidate.role === role);
+    if (!user) throw new BadRequestException('You can only update recovery questions for your signed-in account.');
+    if (!SECURITY_QUESTIONS.includes(input.securityQuestion1) || !SECURITY_QUESTIONS.includes(input.securityQuestion2) || input.securityQuestion1 === input.securityQuestion2 || !input.securityAnswer1?.trim() || !input.securityAnswer2?.trim()) {
+      throw new BadRequestException('Choose two different security questions and provide both answers.');
+    }
+    user.securityQuestion1 = input.securityQuestion1;
+    user.securityAnswerHash1 = hashAnswer(input.securityAnswer1);
+    user.securityQuestion2 = input.securityQuestion2;
+    user.securityAnswerHash2 = hashAnswer(input.securityAnswer2);
   }
 }

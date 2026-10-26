@@ -16,13 +16,18 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  private publicUser(user: import('./entities/user.entity').User) {
+    const { password, securityAnswerHash1, securityAnswerHash2, ...safe } = user;
+    return safe;
+  }
+
   @Get()
   @Roles('admin', 'superuser')
   @ApiOperation({ summary: 'Get all users', description: 'Returns the complete list of registered users. Requires admin or superuser role.' })
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
   @ApiResponse({ status: 403, description: 'Access denied — requires admin or superuser role' })
   findAll() {
-    return { success: true, data: this.usersService.findAll(), message: 'Users retrieved successfully' };
+    return { success: true, data: this.usersService.findAll().map((user) => this.publicUser(user)), message: 'Users retrieved successfully' };
   }
 
   @Get('search')
@@ -32,7 +37,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Search completed successfully' })
   @ApiResponse({ status: 403, description: 'Access denied — requires admin or superuser role' })
   search(@Query('q') q: string) {
-    return { success: true, data: this.usersService.search(q), message: 'Search completed' };
+    return { success: true, data: this.usersService.search(q).map((user) => this.publicUser(user)), message: 'Search completed' };
   }
 
   @Get('pending')
@@ -41,7 +46,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Pending users retrieved' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   getPending() {
-    return { success: true, data: this.usersService.getPending(), message: 'Pending users retrieved' };
+    return { success: true, data: this.usersService.getPending().map((user) => this.publicUser(user)), message: 'Pending users retrieved' };
   }
 
   @Get('approved')
@@ -50,7 +55,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Approved users retrieved' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   getApproved() {
-    return { success: true, data: this.usersService.getApproved(), message: 'Approved users retrieved' };
+    return { success: true, data: this.usersService.getApproved().map((user) => this.publicUser(user)), message: 'Approved users retrieved' };
   }
 
   @Get('rejected')
@@ -59,7 +64,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Rejected users retrieved' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   getRejected() {
-    return { success: true, data: this.usersService.getRejected(), message: 'Rejected users retrieved' };
+    return { success: true, data: this.usersService.getRejected().map((user) => this.publicUser(user)), message: 'Rejected users retrieved' };
   }
 
   @Get(':id')
@@ -69,7 +74,7 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   findOne(@Param('id') id: string) {
-    return { success: true, data: this.usersService.findById(id), message: 'User retrieved successfully' };
+    return { success: true, data: this.publicUser(this.usersService.findById(id)), message: 'User retrieved successfully' };
   }
 
   @Post()
@@ -79,7 +84,7 @@ export class UsersController {
   @ApiResponse({ status: 400, description: 'Validation failed or duplicate email' })
   @ApiResponse({ status: 403, description: 'Access denied — requires admin or superuser role' })
   create(@Body() dto: CreateUserDto) {
-    return { success: true, data: this.usersService.create(dto), message: 'User created successfully' };
+    return { success: true, data: this.publicUser(this.usersService.create(dto)), message: 'User created successfully' };
   }
 
   @Post('register')
@@ -87,7 +92,7 @@ export class UsersController {
   @ApiResponse({ status: 201, description: 'User registered successfully' })
   @ApiResponse({ status: 400, description: 'Validation failed or duplicate email' })
   register(@Body() dto: CreateUserDto) {
-    return { success: true, data: this.usersService.create(dto), message: 'User registered successfully' };
+    return { success: true, data: this.publicUser(this.usersService.create(dto)), message: 'User registered successfully' };
   }
 
   @Post('signin')
@@ -105,7 +110,20 @@ export class UsersController {
     if (user.status === 'rejected') {
       return { success: false, data: null, message: 'Your registration was not approved. Please contact support.' };
     }
-    return { success: true, data: user, message: 'Signed in successfully' };
+    return { success: true, data: this.publicUser(user), message: 'Signed in successfully' };
+  }
+
+  @Post('recover-password')
+  @ApiOperation({ summary: 'Reset password after matching both registered security answers' })
+  recoverPassword(@Body() body: { email: string; role: string; securityAnswer1: string; securityAnswer2: string; newPassword: string }) {
+    this.usersService.recoverPassword(body);
+    return { success: true, data: null, message: 'Password updated. You can now sign in.' };
+  }
+
+  @Post('recovery-questions')
+  @ApiOperation({ summary: 'Get registered recovery question prompts for an email and role' })
+  recoveryQuestions(@Body() body: { email: string; role: string }) {
+    return { success: true, data: this.usersService.recoveryQuestions(body.email, body.role), message: 'Recovery questions retrieved' };
   }
 
   @Patch(':id')
@@ -115,7 +133,20 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return { success: true, data: this.usersService.update(id, dto), message: 'User updated successfully' };
+    return { success: true, data: this.publicUser(this.usersService.update(id, dto)), message: 'User updated successfully' };
+  }
+
+  @Patch(':id/security-questions')
+  @Roles('admin', 'superuser', 'volunteer', 'donor', 'beneficiary', 'seller')
+  @ApiOperation({ summary: 'Set or replace your account recovery questions' })
+  setRecoveryQuestions(
+    @Param('id') id: string,
+    @Headers('role') role: string,
+    @Headers('user-email') email: string,
+    @Body() body: { securityQuestion1: string; securityAnswer1: string; securityQuestion2: string; securityAnswer2: string },
+  ) {
+    this.usersService.setRecoveryQuestions(id, email || '', role || '', body);
+    return { success: true, data: null, message: 'Recovery questions saved.' };
   }
 
   @Patch(':id/approve')
@@ -125,7 +156,7 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 403, description: 'Access denied — requires superuser role' })
   approve(@Param('id') id: string) {
-    return { success: true, data: this.usersService.approve(id), message: 'User approved successfully' };
+    return { success: true, data: this.publicUser(this.usersService.approve(id)), message: 'User approved successfully' };
   }
 
   @Patch(':id/reject')
@@ -135,7 +166,7 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 403, description: 'Access denied — requires superuser role' })
   reject(@Param('id') id: string) {
-    return { success: true, data: this.usersService.reject(id), message: 'User rejected' };
+    return { success: true, data: this.publicUser(this.usersService.reject(id)), message: 'User rejected' };
   }
 
   @Delete(':id')

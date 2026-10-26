@@ -8,6 +8,9 @@ export interface Program {
   endDate: string;
   budget: number;
   raised: number;
+  taskProgress?: number;
+  totalTasks?: number;
+  completedTasks?: number;
   beneficiaries: number;
   volunteers: number;
   description: string;

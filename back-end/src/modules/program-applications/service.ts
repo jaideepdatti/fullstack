@@ -3,10 +3,11 @@ import { ProgramsService } from '../programs/service';
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ProgramApplication } from './entities/program-application.entity';
 import { CreateProgramApplicationDto } from './dto/create-program-application.dto';
+import { NotificationsService } from '../notifications/service';
 
 @Injectable()
 export class ProgramApplicationsService {
-  constructor(private readonly assignments: ProgramAssignmentsService, private readonly programs: ProgramsService) {}
+  constructor(private readonly assignments: ProgramAssignmentsService, private readonly programs: ProgramsService, private readonly notifications: NotificationsService) {}
   private applications: ProgramApplication[] = [];
   private counter = 100;
 
@@ -14,7 +15,18 @@ export class ProgramApplicationsService {
     return `papp_${Date.now()}_${this.counter++}`;
   }
 
+  private ensureApprovedMembership(application: ProgramApplication): void {
+    if (application.status !== 'approved') return;
+    const existing = this.assignments.findByProgram(application.programId).find((a) => a.volunteerEmail.toLowerCase() === application.volunteerEmail.toLowerCase());
+    if (existing) this.assignments.activateApprovedMembership(existing.id);
+    else {
+      const membership = this.assignments.create({ ...application, id: undefined, role: 'Volunteer' });
+      this.assignments.activateApprovedMembership(membership.id);
+    }
+  }
+
   findAll(): ProgramApplication[] {
+    this.applications.forEach((application) => this.ensureApprovedMembership(application));
     return this.applications.slice();
   }
 
@@ -26,6 +38,13 @@ export class ProgramApplicationsService {
 
   findByProgram(programId: string): ProgramApplication[] {
     return this.applications.filter((a) => a.programId === programId);
+  }
+
+  findByOrg(org: string): ProgramApplication[] {
+    const programIds = new Set(this.programs.findByOrg(org).map((program) => program.id));
+    const applications = this.applications.filter((application) => programIds.has(application.programId));
+    applications.forEach((application) => this.ensureApprovedMembership(application));
+    return applications;
   }
 
   findByVolunteer(email: string): ProgramApplication[] {
@@ -60,6 +79,13 @@ export class ProgramApplicationsService {
       appliedAt: new Date().toISOString().split('T')[0],
     };
     this.applications.push(newApp);
+    this.notifications.create({
+      targetOrg: program.org,
+      title: 'New volunteer request',
+      message: `${newApp.volunteerName} requested to join ${program.name}.`,
+      type: 'info',
+      link: '/org-admin.html#programs',
+    });
     return { ...newApp };
   }
 
@@ -67,10 +93,8 @@ export class ProgramApplicationsService {
     const idx = this.applications.findIndex((a) => a.id === id);
     if (idx === -1) throw new NotFoundException(`Program application with id '${id}' not found`);
     const application = this.applications[idx];
-    const existing = this.assignments.findByProgram(application.programId).find((a) => a.volunteerEmail.toLowerCase() === application.volunteerEmail.toLowerCase());
-    if (!existing) this.assignments.create({ ...application, id: undefined, role: 'Volunteer' });
-    else if (['cancelled','declined'].includes(existing.status)) this.assignments.update(existing.id, { status: 'pending' });
     this.applications[idx].status = 'approved';
+    this.ensureApprovedMembership(this.applications[idx]);
     return { ...this.applications[idx] };
   }
 

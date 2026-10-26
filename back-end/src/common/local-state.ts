@@ -23,6 +23,8 @@ export function enableLocalState(app:INestApplication,file=path.resolve(process.
    for(const [key,value] of Object.entries(fields))if(Object.prototype.hasOwnProperty.call(instance,key)&&((Array.isArray(instance[key])&&Array.isArray(value))||(key==='counter'&&typeof value==='number')))instance[key]=value;
   }
  }
+ const tasks=instances.get('TasksService') as {rebuildProgramProgress?:()=>void}|undefined;
+ tasks?.rebuildProgramProgress?.();
  const save=()=>{
   const snapshot:State={};
   for(const [name,instance] of instances)snapshot[name]=Object.fromEntries(Object.entries(instance).filter(([key,value])=>Array.isArray(value)||(key==='counter'&&typeof value==='number')));

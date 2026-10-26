@@ -119,7 +119,8 @@ export class OrganizationsService {
       color: colors[Math.floor(Math.random() * colors.length)],
       status: dto.status || 'pending',
       listingStatus: 'unlisted',
-      adminEmail: dto.adminEmail, image: dto.image, bankAccountName: dto.bankAccountName, bankAccountNumber: dto.bankAccountNumber, bankIfsc: dto.bankIfsc, upiId: dto.upiId, neededResources: dto.neededResources,
+      adminEmail: dto.adminEmail, image: dto.image, certificateUrl: dto.certificateUrl, certificateName: dto.certificateName,
+      bankAccountName: dto.bankAccountName, bankAccountNumber: dto.bankAccountNumber, bankIfsc: dto.bankIfsc, upiId: dto.upiId, neededResources: dto.neededResources,
     };
     this.organizations.push(newOrg);
     return { ...newOrg };

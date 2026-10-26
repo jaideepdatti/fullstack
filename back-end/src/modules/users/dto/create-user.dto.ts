@@ -39,4 +39,24 @@ export class CreateUserDto {
   @IsArray()
   @IsString({ each: true })
   skills?: string[];
+
+  @ApiPropertyOptional({ example: 'first_school' })
+  @IsOptional()
+  @IsString()
+  securityQuestion1?: string;
+
+  @ApiPropertyOptional({ example: 'My first school' })
+  @IsOptional()
+  @IsString()
+  securityAnswer1?: string;
+
+  @ApiPropertyOptional({ example: 'childhood_friend' })
+  @IsOptional()
+  @IsString()
+  securityQuestion2?: string;
+
+  @ApiPropertyOptional({ example: 'Alex' })
+  @IsOptional()
+  @IsString()
+  securityAnswer2?: string;
 }

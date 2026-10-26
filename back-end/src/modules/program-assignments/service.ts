@@ -64,6 +64,14 @@ export class ProgramAssignmentsService {
     return this.findById(id);
   }
 
+  activateApprovedMembership(id: string): ProgramAssignment {
+    const assignment = this.findById(id);
+    const idx = this.assignments.findIndex((a) => a.id === id);
+    this.assignments[idx].status = 'active';
+    this.syncCount(assignment.programId);
+    return this.findById(id);
+  }
+
   create(dto: CreateProgramAssignmentDto): ProgramAssignment {
     this.programs.findById(dto.programId);
     if (this.exists(dto.programId, dto.volunteerEmail)) {

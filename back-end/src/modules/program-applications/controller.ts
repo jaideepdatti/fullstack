@@ -24,6 +24,16 @@ export class ProgramApplicationsController {
     return { success: true, data: this.service.findAll(), message: 'Applications retrieved' };
   }
 
+  @Get('by-org/:org')
+  @Roles('admin', 'superuser')
+  @ApiOperation({ summary: 'Get program applications for one organization' })
+  findByOrg(@Param('org') org: string, @Headers('role') role: string, @Headers('organization') requestOrg: string) {
+    if (role === 'admin' && (!requestOrg || org.toLowerCase() !== requestOrg.toLowerCase())) {
+      throw new ForbiddenException('Organization administrators can review applications for their own organization only.');
+    }
+    return { success: true, data: this.service.findByOrg(org), message: 'Organization applications retrieved' };
+  }
+
   @Get('pending')
   @Roles('admin', 'superuser')
   @ApiOperation({ summary: 'Get pending applications awaiting review' })
