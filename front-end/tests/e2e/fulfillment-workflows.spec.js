@@ -20,6 +20,7 @@ async function setup(page,role,overrides={}) {
    }
    return route.fulfill({json:{success:true,data:{}}});
   }
+  if(url.pathname.endsWith('/brief'))return route.fulfill({json:{success:true,data:{...data.deliveries[0],pickupAddress:'HopeConnect collection point',address:'Pune address',items:[{name:'Blankets',quantity:3}],available:true,eligibility:{eligible:true,reasons:[]},blockers:[],reviewedVersion:'version-one'}}});
   const map={requests:'resourceRequests',deliveries:'deliveries',inventory:'inventory',volunteers:'deliveryVolunteers'};
   let rows=parts[1]==='fulfillment'?data[map[parts[2]]]:data[parts[1]];
   if(url.pathname==='/donations/balance/HopeConnect')rows={verifiedTotal:0};
@@ -57,13 +58,14 @@ test('organization approves from inventory and offers delivery to all volunteers
  await expect(page.locator('.inventory-table tbody tr').first()).toContainText('2');
  await page.getByRole('button',{name:'Arrange Resource Delivery',exact:true}).click();
  modal=page.getByRole('dialog');
- await modal.getByLabel('Assignment Method').selectOption('direct');
- await modal.getByLabel('Volunteer Email').selectOption('volunteer@kindred.org');
- await modal.getByLabel('Assignment Method').selectOption('broadcast');
+ await modal.getByLabel('Delivery date',{exact:true}).fill('2099-01-01');
+ await modal.getByLabel('Window starts').fill('09:00');await modal.getByLabel('Window ends').fill('12:00');
+ await modal.getByLabel('Pickup area / city').fill('Mumbai');await modal.getByLabel('Destination area / city').fill('Pune');
+ await modal.getByLabel('Exact Organization Collection Address').fill('Mumbai warehouse');
  await modal.getByRole('button',{name:'Submit',exact:true}).click();
- await expect(page.locator('[data-delivery-id="delivery"]')).toContainText('Offered to all active volunteers');
+ await expect(page.locator('[data-delivery-id="delivery"]')).toContainText('Posted to volunteer portal');
  expect(writes.find(w=>w.path.endsWith('/respond')).body.allocations).toEqual([{stockId:stock.id,quantity:3}]);
- expect(writes.find(w=>w.path==='/fulfillment/deliveries').body).toEqual({kind:'resource',sourceId:resourceRequest.id,mode:'broadcast'});
+ expect(writes.find(w=>w.path==='/fulfillment/deliveries').body).toMatchObject({kind:'resource',sourceId:resourceRequest.id,mode:'broadcast',scheduledDate:'2099-01-01',shiftStart:'09:00',shiftEnd:'12:00'});
 });
 
 test('volunteer accepts a delivery before pickup, then uploads proof after starting delivery',async({page})=>{
@@ -71,7 +73,7 @@ test('volunteer accepts a delivery before pickup, then uploads proof after start
  const card=page.locator('[data-delivery-id="delivery"]');
  await expect(card).toContainText('Details shared after acceptance');
  await expect(card.getByRole('button',{name:'Confirm Pickup',exact:true})).toHaveCount(0);
- await card.getByRole('button',{name:'Accept Delivery',exact:true}).click();
+ await card.getByRole('button',{name:'Apply & Accept Delivery',exact:true}).click();const review=page.getByRole('dialog',{name:'Review delivery details',exact:true});await review.getByRole('checkbox').check();await review.getByRole('button',{name:'Accept Delivery',exact:true}).click();await expect(review.getByRole('status')).toContainText('You are assigned');await review.getByRole('button',{name:'Close dialog',exact:true}).click();
  await expect(card).toContainText('Pune address');
  await card.getByRole('button',{name:'Confirm Pickup',exact:true}).click();
  await card.getByRole('button',{name:'Start Delivery',exact:true}).click();

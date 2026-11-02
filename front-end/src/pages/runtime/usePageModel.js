@@ -11,19 +11,19 @@ import { managementActions } from '../actions/managementActions.js';
 import { filterRecords } from '../../services/pageData.js';
 import { readStored as stored, writeStored } from '../../services/storage.js';
 import { profileSkillValues } from '../../services/skills.js';
-import { localDate } from '../../services/validation.js';
+import { validateField, validatePhone, validateEmail, localDate } from '../../services/validation.js';
 
 function initialValues(path, session) {
   const values = Object.fromEntries(Object.entries(fields[path] || {}).map(([name, item]) => [name, item.default]));
   Object.assign(values, { 'pf-name': session?.name || '', 'pf-email': session?.email || '', 'pf-role': session?.role || '', 'pf-org': session?.org || '',
     'pf-phone': session?.phone || '', 'pf-bio': session?.bio || '',
     fullName: session?.name || '', 'donor-name': session?.name || '', 'donor-email': session?.email || '',
-    'custom-amount': '500', 'log-date': localDate(),
+    'custom-amount': '500', 'log-date': localDate(), programStartDate:'', programShiftDays:[],
   });
   const edit = path === '/create-program.html' ? stored('kindred_edit_program') : null;
   const request = path === '/create-program.html' ? stored('kindred_resource_program_request') : null;
   if (request && new URLSearchParams(window.location.search).get('request') === request.id) Object.assign(values, { programTitle: `${request.resource} Collection`, programDesc: `${request.reason}\nResources needed: ${request.resource}, quantity ${request.quantity}.`, programLocation: request.address, programBudget:'0', volunteerGoal:'1' });
-  if (edit && new URLSearchParams(window.location.search).get('edit') === edit.id) Object.assign(values, { programTitle: edit.name, programLocation: edit.location, programBudget: String(edit.budget), programEndDate: edit.endDate, volunteerGoal: String(edit.volunteerGoal), programDesc: edit.description, progOpenApps: String(edit.openForApplications), requestPublicListing: false });
+  if (edit && new URLSearchParams(window.location.search).get('edit') === edit.id) Object.assign(values, { programStartDate:edit.startDate,programShiftStart:edit.shiftStart||'',programShiftEnd:edit.shiftEnd||'',programShiftDays:edit.shiftDays||[],programReportingTime:edit.reportingTime||'',programInvitationDeadline:edit.invitationDeadline||'',programMeetingPoint:edit.meetingPoint||'',programContactName:edit.contactName||'',programContactPhone:edit.contactPhone||'',programWorkBrief:edit.workBrief||edit.description,programTitle: edit.name, programLocation: edit.location, programBudget: String(edit.budget), programEndDate: edit.endDate, volunteerGoal: String(edit.volunteerGoal), programDesc: edit.description, progOpenApps: String(edit.openForApplications), requestPublicListing: false });
   return values;
 }
 
@@ -46,6 +46,7 @@ export default function usePageModel(route) {
       files: {}, customSkills: [], categories: editing ? [edit.focus].flat() : [], programSkills: editing ? edit.requiredSkills : [], editingProgram: editing ? edit.id : null, editingStartDate: editing ? edit.startDate : null,
       urgency: 'medium', hiddenNodes: [], filters: { users: 'all', inbox: 'all', shop: 'all', catalog: 'all' }, searches: {},
       items: [{ id: 'first-item', name: '', quantity: 1, condition: 'New' }], error: '', busy: false, editor: null, confirmation: null,
+      programWorkspaceId: null,
       selectedVolunteers: [],
       touchedFields: [], fieldErrors: {},
     };
@@ -55,9 +56,9 @@ export default function usePageModel(route) {
   const state = { ...storedState, selectedVolunteers: storedState.editingProgram && !storedState.assignmentsTouched ? resources.data('assignments').filter((a) => a.programId === storedState.editingProgram && ['active', 'pending'].includes(a.status)).map((a) => a.volunteerEmail) : storedState.selectedVolunteers, customSkills: route.path === '/profile.html' && !storedState.customSkillsTouched ? savedSkills.custom : storedState.customSkills };
   const values = { ...rawValues };
   if (route.path === '/profile.html') for (const [field, checked] of Object.entries(savedSkills.checks)) if (!state.touchedFields.includes(field)) values[field] = checked;
-  for (const item of state.items) for (const key of ['name','quantity','condition']) values[`item-${item.id}-${key}`] = item[key];
+  for (const item of state.items) for (const key of ['name','quantity','condition','unit']) values[`item-${item.id}-${key}`] = item[key];
   if (route.path === '/profile.html') {
-    for (const field of ['name','phone','bio']) if (!state.touchedFields.includes('pf-'+field)) values['pf-'+field] = savedProfile[field] ?? session?.[field] ?? '';
+    for (const field of ['name','phone','bio','location','dateOfBirth']) if (!state.touchedFields.includes('pf-'+field)) values['pf-'+field] = savedProfile[field] ?? session?.[field] ?? '';
   }
   if (route.path === '/seller-dashboard.html') {
     const bank = resources.data('sellers').find((seller) => seller.email === session?.email)?.bankDetails;
@@ -113,6 +114,8 @@ export default function usePageModel(route) {
     selectUrgency: ([value]) => update({ urgency: value }),
     selectEmergencyType: ([value]) => setValues({ selectedEmergencyType: value }),
     selectRating: ([value]) => setValues({ ratingValue: String(value) }),
+    openVolunteerDetails: async ([email]) => { const profile = await api.get(`/volunteers/review/${encodeURIComponent(email)}`); update({ detail: { profile }, detailCollection: 'personProfile', modal: 'recordDetail' }); },
+    openApplicantDetails: async ([id]) => { const detail = await api.get(`/program-applications/${encodeURIComponent(id)}/applicant`); update({ detail, detailCollection: 'personProfile', modal: 'recordDetail' }); },
     showDetail: ([collection, id]) => update({ detail: ui.data(collection).find((row) => row.id === id), detailCollection: collection, modal: 'recordDetail' }),
     showStatistics: () => update({ modal: 'recordDetail', detail: { title: 'Statistics', organizations: ui.data('organizations').length, programs: ui.data('programs').length, volunteers: ui.data('volunteers').length, requests: ui.data('incoming').length, donations: ui.data('resources').length } }),
     focusSignIn: () => fieldRefs.current['si-email']?.focus(),
@@ -129,7 +132,17 @@ export default function usePageModel(route) {
     const handler = handlers[name];
     if (!handler) { update({ error: `This action (${name}) could not be completed. Please try again.` }); return; }
     pending.current = true; update({ busy: true, error: '', fieldErrors: {} });
-    try { await handler(args, meta); }
+    try {
+      if (/^(save|submit|createProgram|registerNgo|proceed|execute|signIn|doSignIn)/.test(name)) {
+        for (const [field,element] of Object.entries(fieldRefs.current)) {
+          if (meta.validationScope && !meta.validationScope.contains(element)) continue;
+          if (!element?.isConnected || !element.getClientRects().length || element.readOnly || !String(values[field] ?? '').trim()) continue;
+          if (element.type === 'tel' || /phone/i.test(field)) validateField(field,validatePhone,values[field]);
+          if (element.type === 'email' || /email/i.test(field)) validateField(field,validateEmail,values[field]);
+        }
+      }
+      await handler(args, meta);
+    }
     catch (error) { if (mounted.current) { update({ error: error.message, fieldErrors: error.field ? { [error.field]: error.message } : {} }); toast({ type: 'error', title: 'Action could not be completed', body: error.message, duration: 8000 }); } }
     finally { pending.current = false; if (mounted.current) update({ busy: false }); }
   }
@@ -159,7 +172,7 @@ export default function usePageModel(route) {
     if (field.endsWith('card-expiry')) { const digits = String(value).replace(/\D/g,'').slice(0,4); value = digits.length > 2 ? digits.slice(0,2)+'/'+digits.slice(2) : digits; }
     if (field.endsWith('card-cvv')) value = String(value).replace(/\D/g,'').slice(0,4);
     setValues({ [field]: value });
-    setState((previous) => { const fieldErrors = { ...previous.fieldErrors }; delete fieldErrors[field]; const itemField = /^item-(.+)-(name|quantity|condition)$/.exec(field); return { ...previous, ...(itemField ? { items: previous.items.map((item) => item.id === itemField[1] ? { ...item, [itemField[2]]: value } : item) } : {}), fieldErrors, error: previous.fieldErrors[field] || route.path === '/signin.html' && ['si-email','si-pass'].includes(field) ? '' : previous.error, touchedFields: [...new Set([...previous.touchedFields,field])] }; });
+    setState((previous) => { const fieldErrors = { ...previous.fieldErrors }; delete fieldErrors[field]; const itemField = /^item-(.+)-(name|quantity|condition|unit)$/.exec(field); return { ...previous, ...(itemField ? { items: previous.items.map((item) => item.id === itemField[1] ? { ...item, [itemField[2]]: value } : item) } : {}), fieldErrors, error: previous.fieldErrors[field] || route.path === '/signin.html' && ['si-email','si-pass'].includes(field) ? '' : previous.error, touchedFields: [...new Set([...previous.touchedFields,field])] }; });
   };
   ui.props = (key, spec, actions = {}) => {
     const { actionLabel, pageForm, radioValueLabel, ...attrs } = spec;
@@ -203,7 +216,7 @@ export default function usePageModel(route) {
     for (const [event, callback] of Object.entries(events)) {
       if (event === 'input' || event === 'change') continue;
       const reactEvent = { click: 'onClick', submit: 'onSubmit', keydown: 'onKeyDown' }[event];
-      if (reactEvent) attrs[reactEvent] = (eventObject) => { if (event === 'keydown' && eventObject.key !== 'Enter') return; eventObject.preventDefault(); eventObject.stopPropagation(); action(callback.name, callback.args, meta); };
+      if (reactEvent) attrs[reactEvent] = (eventObject) => { if (event === 'keydown' && eventObject.key !== 'Enter') return; eventObject.preventDefault(); eventObject.stopPropagation(); action(callback.name, callback.args, {...meta,validationScope:eventObject.currentTarget.closest('form,dialog,.profile-card,.form-card')}); };
     }
     if (state.busy && (events.click || events.submit) && attrs.type) attrs.disabled = true;
     let selected;
@@ -270,7 +283,7 @@ export default function usePageModel(route) {
       'stat-pending-reqs': ui.data('users').filter((u) => u.status === 'pending').length+ui.data('requests').filter((r) => r.status === 'pending').length,
       'stat-total-users': ui.data('users').length, 'stat-card-donations': '₹'+ui.data('donations').reduce((n,d) => n+Number(d.amount || 0),0).toLocaleString('en-IN'),
       'stat-today-donations': '₹'+ui.data('donations').filter((d) => d.date?.startsWith(new Date().toISOString().slice(0,10))).reduce((n,d) => n+Number(d.amount || 0),0).toLocaleString('en-IN'),
-      'stat-hours': ui.data('hours').filter((h) => h.status === 'approved').reduce((n,h) => n+h.hours,0), 'stat-active': ui.data('assignments').filter((a) => a.status === 'active').length,
+      'stat-hours': ui.data('hours').filter((h) => h.status === 'approved').reduce((n,h) => n+h.hours,0), 'stat-active': [...ui.data('tasks'),...ui.data('subtasks')].filter(t=>!['completed','cancelled'].includes(t.status)).length,
       'rstat-total': ui.data('resources').length, 'rstat-pending': ui.data('resources').filter((r) => r.status === 'pending').length,
       'rstat-active': ui.data('resources').filter((r) => ['assigned','picked_up','in_transit'].includes(r.status)).length, 'rstat-delivered': ui.data('resources').filter((r) => ['delivered','completed'].includes(r.status)).length,
       'stat-seller-total': ui.data('products').length, 'stat-seller-approved': ui.data('products').filter((p) => p.status === 'approved').length,

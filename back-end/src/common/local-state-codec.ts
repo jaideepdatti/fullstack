@@ -13,12 +13,12 @@ function protectKey(value:Buffer,unprotect=false):Buffer {
   return Buffer.from(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',command],{input:value.toString('base64'),encoding:'utf8',windowsHide:true,stdio:['pipe','pipe','pipe']}).trim(),'base64');
  } catch {throw new Error('Cannot unlock local records for this operating-system account');}
 }
-export function createLocalStateCodec(file:string) {
+export function createLocalStateCodec(file:string,portable=false) {
  const keyFile=file+'.key';
  fs.mkdirSync(path.dirname(file),{recursive:true});
  let key:Buffer;
- if(fs.existsSync(keyFile))key=protectKey(fs.readFileSync(keyFile),true);
- else {key=randomBytes(32);fs.writeFileSync(keyFile,protectKey(key),{flag:'wx',mode:0o600});}
+ if(fs.existsSync(keyFile))key=portable?fs.readFileSync(keyFile):protectKey(fs.readFileSync(keyFile),true);
+ else {key=randomBytes(32);fs.writeFileSync(keyFile,portable?key:protectKey(key),{flag:'wx',mode:0o600});}
  if(key.length!==32)throw new Error('Invalid local data key');
  return {
   encrypt(value:string):Buffer {const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,iv);const encrypted=Buffer.concat([cipher.update(value,'utf8'),cipher.final()]);return Buffer.concat([Buffer.from('KND1'),iv,cipher.getAuthTag(),encrypted]);},

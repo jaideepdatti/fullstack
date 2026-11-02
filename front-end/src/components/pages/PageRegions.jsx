@@ -1,3 +1,4 @@
+import ProgramParticipation, { VolunteerCandidates } from './ProgramParticipation.jsx';
 import { Link } from '../../routes/navigation.jsx';
 import PageField from '../../pages/runtime/PageField.jsx';
 import { usePage } from '../../pages/runtime/PageContext.js';
@@ -34,11 +35,11 @@ function OrganizationRows({ records }) {
 }
 function UserRows({ records }) {
   const ui = usePage(), platform = ui.path === '/platform-admin.html';
-  return records.map((u) => <tr key={u.id}><td><strong>{u.name}</strong>{!platform && <div>{u.email}</div>}</td>{platform ? <><td>{u.email}</td><td>{u.role}</td><td>{u.org || '—'}</td><td><span className={`status-badge ${u.status}`}>{u.status}</span></td></> : <><td>{u.role}</td><td><span className={`status-badge ${u.status}`}>{u.status}</span></td><td>{u.org || 'Registration'}</td><td>{u.registeredAt?.slice(0,10) || '—'}</td></>}<td><div className="action-btns"><Action name="showDetail" args={['users',u.id]}>View</Action><Action name="openUserEditor" args={[u.id]}>Edit</Action>{u.status !== 'approved' && <Mutate collection="users" id={u.id} operation="approve">Approve</Mutate>}{u.status !== 'rejected' && <Mutate collection="users" id={u.id} operation="reject">Reject</Mutate>}<Mutate collection="users" id={u.id} operation="delete">Delete</Mutate></div></td></tr>);
+  return records.map((u) => <tr key={u.id}><td><strong>{u.name}</strong>{!platform && <div>{u.email}</div>}</td>{platform ? <><td>{u.email}</td><td>{u.role}</td><td>{u.org || u.location || '—'}</td><td><div><span className={`status-badge ${u.verificationStatus || 'not_required'}`}>{(u.verificationStatus || 'not required').replaceAll('_',' ')}</span></div><div><span className={`status-badge ${u.approvalStatus || u.status}`}>{u.approvalStatus || u.status}</span></div></td></> : <><td>{u.role}</td><td><div><span className={`status-badge ${u.verificationStatus || 'not_required'}`}>{(u.verificationStatus || 'not required').replaceAll('_',' ')}</span></div><div><span className={`status-badge ${u.approvalStatus || u.status}`}>{u.approvalStatus || u.status}</span></div></td><td>{u.location || u.org || 'Registration'}</td><td>{u.registeredAt?.slice(0,10) || '—'}</td></>}<td><div className="action-btns"><Action name="showDetail" args={['users',u.id]}>View</Action><Action name="openUserEditor" args={[u.id]}>Edit</Action>{ui.session?.role === 'superuser' && u.status !== 'approved' && <Mutate collection="users" id={u.id} operation="approve">Approve</Mutate>}{ui.session?.role === 'superuser' && u.status !== 'rejected' && <Mutate collection="users" id={u.id} operation="reject">Reject</Mutate>}{ui.session?.role === 'superuser' && <Mutate collection="users" id={u.id} operation="delete">Delete</Mutate>}</div></td></tr>);
 }
 function VolunteerRows({ records, region }) {
   const ui = usePage(), overview = region === 'orgOverviewVolunteersBody', orgTable = region === 'orgVolunteersTableBody';
-  return records.map((v) => <tr className={`volunteer-row status-${v.status}`} key={v.id}><td><strong>{v.name}</strong><div>{v.email}</div></td><td>{v.role}</td>{overview || orgTable ? <><td>{(v.skills || []).join(', ')}</td><td>{v.hours || 0}</td>{orgTable && <td><span className={`status-badge ${v.status}`}>{v.status}</span></td>}</> : <><td><span className={`status-badge ${v.status}`}>{v.status}</span></td><td>{v.hours || 0}</td><td>{ui.data('tasks').filter((t) => t.assignedToEmail === v.email && t.status !== 'completed').length}</td></>}{!overview && <td><div className="action-btns">{v.membershipOnly ? <Action name="openGlobalTaskModal" args={[v.email]}>+ Assign Task</Action> : <><Action name="showDetail" args={['volunteers',v.id]}>Details</Action><Action name="openVolunteerEditor" args={[v.id]}>Edit</Action><Mutate collection="volunteers" id={v.id} operation="delete">Delete</Mutate><Action name="openGlobalTaskModal" args={[v.id]}>+ Assign Task</Action></>}</div></td>}</tr>);
+  return records.map((v) => <tr className={`volunteer-row status-${v.status}`} key={v.id}><td><strong>{v.name}</strong><div>{v.email}</div><div className="volunteer-presence-summary"><span className={`presence-badge ${v.availableNow ? 'is-available' : ''}`}>{v.availableNow ? 'Available now' : 'Not available now'}</span><div>Current location: {v.currentLocation || 'Not shared'}</div>{v.locationUpdatedAt && <small>Location updated: {new Date(v.locationUpdatedAt).toLocaleString()}</small>}</div></td><td>{v.role}</td>{overview || orgTable ? <><td>{(v.skills || []).join(', ')}</td><td>{v.hours || 0}</td>{orgTable && <td><span className={`status-badge ${v.status}`}>{v.status}</span></td>}</> : <><td><span className={`status-badge ${v.status}`}>{v.status}</span></td><td>{v.hours || 0}</td><td>{ui.data('tasks').filter((t) => t.assignedToEmail === v.email && t.status !== 'completed').length}</td></>}{!overview && <td><div className="action-btns">{v.membershipOnly ? <><Action name="openVolunteerDetails" args={[v.email]}>Details</Action><Action name="openGlobalTaskModal" args={[v.email]}>+ Assign Task</Action></> : <><Action name="openVolunteerDetails" args={[v.email]}>Details</Action><Action name="openVolunteerEditor" args={[v.id]}>Edit</Action><Mutate collection="volunteers" id={v.id} operation="delete">Delete</Mutate><Action name="openGlobalTaskModal" args={[v.id]}>+ Assign Task</Action></>}</div></td>}</tr>);
 }
 function IncomingCards({ records, registration = false }) {
   const ui = usePage();
@@ -65,7 +66,7 @@ function ResourceCards({ records, table }) {
   const admin = ['admin','superuser'].includes(ui.session?.role), volunteer = ui.session?.role === 'volunteer';
   return records.filter(r => r.category !== 'Shop Delivery').map((r) => {
     const shared = ui.data('deliveries').some(d => d.kind === 'collection' && d.sourceId === r.id);
-    const actions = <div className="page-record-actions"><Action name="showDetail" args={['resources',r.id]}>Details</Action>{admin && ['submitted','pending_pickup'].includes(r.status) && <a href="#resource-deliveries" className="action-btn resource-assign">Arrange Collection</a>}{admin && <Action name="allocateResource" args={[r.id]} className="action-btn resource-allocate">Allocate to Program</Action>}{!shared && (admin || volunteer) && r.status === 'pending_pickup' && <Mutate collection="resource-donations" id={r.id} operation="start-pickup">Start Pickup</Mutate>}{!shared && (admin || volunteer) && r.status === 'in_transit' && <Mutate collection="resource-donations" id={r.id} operation="mark-delivered">Mark Delivered</Mutate>}{admin && r.status === 'delivered' && <Mutate collection="resource-donations" id={r.id} operation="mark-completed">Mark Complete</Mutate>}</div>;
+    const actions = <div className="page-record-actions"><Action name="showDetail" args={['resources',r.id]}>Details</Action>{r.certificate&&<button type="button" className="btn-outline-sm" onClick={()=>ui.update({resourceCertificateId:r.id})}>View Thank-You Certificate</button>}{admin && ['submitted','pending_pickup'].includes(r.status) && <a href="#resource-deliveries" className="action-btn resource-assign">Allocate Volunteer</a>}{admin && <Action name="allocateResource" args={[r.id]} className="action-btn resource-allocate">Allocate to Program</Action>}{!shared && (admin || volunteer) && r.status === 'pending_pickup' && <Mutate collection="resource-donations" id={r.id} operation="start-pickup">Start Pickup</Mutate>}{!shared && (admin || volunteer) && r.status === 'in_transit' && <Mutate collection="resource-donations" id={r.id} operation="mark-delivered">Mark Delivered</Mutate>}{admin && r.status === 'delivered' && <Mutate collection="resource-donations" id={r.id} operation="mark-completed">Mark Complete</Mutate>}</div>;
     if (table) return <tr className={`resource-row status-${r.status}`} key={r.id}><td><strong>{r.category}</strong><p>{r.description}</p>{r.items.map((i) => `${i.name} × ${i.quantity}`).join(', ')}</td><td>{r.donorName}<div>{r.donorEmail}</div></td><td>{r.pickupAddress}<div>{r.pickupDate} • {r.pickupTimeSlot}</div></td><td><span className={`status-badge ${r.status}`}>{r.status}</span><div>{r.assignedVolunteerName || 'Unassigned'}</div></td><td>{actions}</td></tr>;
     return <article className={`page-record-card resource-record-card status-${r.status}`} key={r.id} data-record-id={r.id}><div className="page-record-heading"><h3>{r.category}</h3><span className={`status-badge ${r.status}`}>{r.status.replaceAll('_',' ')}</span></div><p>{r.description}</p><p>{r.items.map((i) => `${i.name} × ${i.quantity} (${i.condition})`).join(', ')}</p><p>{r.pickupAddress}</p><p>{r.pickupDate} • {r.pickupTimeSlot}</p>{r.image&&<a href={r.image} target="_blank" rel="noreferrer">View resource photo</a>}{r.inventory&&<p>Received: {r.inventory.received} ? Reserved: {r.inventory.reserved} ? Distributed: {r.inventory.distributed}</p>}<p>{r.programName || 'Not allocated'} • {r.assignedVolunteerName || 'Awaiting volunteer assignment'}</p>{actions}</article>;
   });
@@ -74,7 +75,20 @@ function HoursCards({ records, review = false }) {
   return records.map((h) => <article className="page-record-card" key={h.id}><div className="page-record-heading"><h4>{h.description || 'Volunteer Hours'}</h4><span className={`status-badge ${h.status}`}>{h.status}</span></div><p>{h.volunteerName} • {h.hours} hours • {h.date}</p>{review && h.status === 'pending' && <div className="page-record-actions"><Mutate collection="hour-logs" id={h.id} operation="approve">Verify</Mutate><Mutate collection="hour-logs" id={h.id} operation="reject">Reject</Mutate></div>}</article>);
 }
 function ApplicationCards({ records }) {
-  return records.filter((a) => a.status === 'pending').map((a) => <article className="page-record-card" key={a.id}><h4>{a.volunteerName} — {a.programName}</h4><p>{a.message || 'No message provided.'}</p><span className={`status-badge ${a.status}`}>{a.status}</span><div className="page-record-actions"><Mutate collection="program-applications" id={a.id} operation="approve">Approve</Mutate><Mutate collection="program-applications" id={a.id} operation="reject">Reject</Mutate></div></article>);
+  const ui = usePage();
+  return [...records].sort((a,b)=>Number(b.status==='pending')-Number(a.status==='pending')).map(a=>{
+    const member=ui.data('assignments').find(m=>m.programId===a.programId&&m.volunteerEmail?.toLowerCase()===a.volunteerEmail?.toLowerCase());
+    const ready=a.status==='approved'&&member?.status==='active'&&!member.needsReconfirmation;
+    return <article className="page-record-card" key={a.id} data-application-id={a.id}>
+      <h4>{a.volunteerName} — {a.programName}</h4><p>{a.volunteerEmail} · Applied: {a.appliedAt || 'Not recorded'}</p>
+      <p>{a.message || 'No message provided.'}</p><span className={`status-badge ${a.status}`}>{a.status}</span>
+      <div className="page-record-actions"><Action name="openApplicantDetails" args={[a.id]}>Applicant Details</Action>
+        {a.status==='pending'&&<><Mutate collection="program-applications" id={a.id} operation="approve">Approve</Mutate><Mutate collection="program-applications" id={a.id} operation="reject">Reject</Mutate></>}
+        {ready&&<Action name="assignApplicantTask" args={[a.id]}>Assign Task</Action>}
+      </div>
+      {a.status==='approved'&&<p>{ready?'Attendance confirmed. You can assign work to this volunteer.':member?.status==='pending'?'Approved. The volunteer has been notified and must review the program invitation and confirm attendance before task assignment.':`Participation: ${member?.needsReconfirmation?'Reconfirmation required':member?.status?.replaceAll('_',' ') || 'Loading invitation'}`}</p>}
+    </article>;
+  });
 }
 
 function ItemsEditor() {
@@ -82,6 +96,7 @@ function ItemsEditor() {
   return ui.state.items.map((item) => <div key={item.id} className="rd-item-row page-donation-item">
     <div><PageField field={`item-${item.id}-name`} spec={{ 'aria-label': 'Item name', className: 'rd-item-name', placeholder: 'Item name (e.g. Rice Bags)' }} /></div>
     <div><PageField field={`item-${item.id}-quantity`} spec={{ 'aria-label': 'Quantity', className: 'rd-item-qty', type: 'number', min: '1' }} /></div>
+    <div><PageField field={`item-${item.id}-unit`} spec={{'aria-label':'Item unit',placeholder:'unit, kg, litre, box'}} /></div>
     <div><PageField as="select" field={`item-${item.id}-condition`} spec={{ 'aria-label': 'Item condition', className: 'rd-item-condition' }}>{['New','Good','Fair'].map((condition) => <option key={condition}>{condition}</option>)}</PageField></div>
     <button className="rd-item-remove-btn" type="button" aria-label="Remove item" disabled={ui.state.busy || ui.state.items.length === 1} onClick={() => ui.update({ items: ui.state.items.filter((value) => value.id !== item.id) })}>×</button>
   </div>);
@@ -98,8 +113,9 @@ export default function PageRegions({ name }) {
   for (const member of acceptedOrgMembers) {
     const existingIndex = orgVolunteers.findIndex((v) => v.email?.toLowerCase() === member.volunteerEmail?.toLowerCase());
     const existing = existingIndex >= 0 ? orgVolunteers[existingIndex] : null;
+    const presence = ui.data('volunteers').find((v) => v.email?.toLowerCase() === member.volunteerEmail?.toLowerCase());
     const loggedHours = ui.data('hours').filter((h) => h.volunteerEmail?.toLowerCase() === member.volunteerEmail?.toLowerCase()).reduce((sum, h) => sum + Number(h.hours || 0), 0);
-    const profile = { ...(existing || {}), id: existing?.id || `program-member-${member.id}`, name: existing?.name || member.volunteerName, email: member.volunteerEmail, role: existing?.role || member.role || 'Volunteer', org: session?.org || member.org || '', status: 'active', skills: existing?.skills || [], hours: existing?.hours || loggedHours, membershipOnly: !existing };
+    const profile = { ...(existing || {}), availableNow: presence?.availableNow, currentLocation: presence?.currentLocation, locationUpdatedAt: presence?.locationUpdatedAt, id: existing?.id || `program-member-${member.id}`, name: existing?.name || member.volunteerName, email: member.volunteerEmail, role: existing?.role || member.role || 'Volunteer', org: session?.org || member.org || '', status: 'active', skills: existing?.skills || [], hours: existing?.hours || loggedHours, membershipOnly: !existing };
     if (existingIndex >= 0) orgVolunteers[existingIndex] = profile;
     else orgVolunteers.push(profile);
   }
@@ -120,7 +136,16 @@ export default function PageRegions({ name }) {
   if (name === 'incomingCards') return collection('incoming', filterRecords(ui.data('incoming'), query('incoming')).filter((record) => record.status === ({ 'new-requests': 'pending', accepted: 'accepted', declined: 'declined' }[ui.activeTab] || 'pending')), (records) => <IncomingCards records={records} />);
   if (['beneficiaryReqList','orgRequestsContainer','orgOverviewIncomingList'].includes(name)) return collection('incoming',filterRecords(ui.data('incoming'),query('incoming')),(records) => <IncomingCards records={records} />);
   if (['emergencyRequests','emergencyRequestsOverview','platformInboxList'].includes(name)) return collection('incoming',ui.data('incoming').filter((r) => name === 'platformInboxList' || /emergency|medical/i.test(r.type)),(records) => <IncomingCards records={records} />);
-  if (['requestsList','allRequestsContainer'].includes(name)) return <>
+  if (name === 'requestsList') return <>
+    <PageRegions name="listingReview" />
+    {collection('requests',ui.data('requests').filter((r) => r.status === 'pending'),(records) => <IncomingCards records={records} registration />)}
+    {ui.data('users').filter((u) => u.status === 'pending').map((u) => <article className="request-card applicant-review-card" key={u.id}>
+      <div><h4>{u.name}</h4><p>{u.role} • {u.email}</p><p>{u.location || 'Location not provided'} • Submitted {u.registeredAt?.slice(0,10) || 'recently'}</p><div className="applicant-statuses"><span className={`status-badge ${u.verificationStatus || 'pending'}`}>Verification: {(u.verificationStatus || 'pending').replaceAll('_',' ')}</span><span className={`status-badge ${u.approvalStatus || u.status}`}>Approval: {u.approvalStatus || u.status}</span></div></div>
+      <div className="action-btns"><Action name="showDetail" args={['users',u.id]}>Inspect Details</Action><Mutate collection="users" id={u.id} operation="approve">Approve</Mutate><Mutate collection="users" id={u.id} operation="reject">Reject</Mutate></div>
+    </article>)}
+    {ui.data('organizations').filter((o) => o.status === 'pending').map((o) => <article className="request-card organization-approval-card" key={o.id}><div><h4>{o.name}</h4><p>{o.focus} • {o.email}</p></div><OrganizationCertificate organization={o} /><div className="action-btns"><Mutate collection="organizations" id={o.id} operation="approve">Approve</Mutate><Mutate collection="organizations" id={o.id} operation="reject">Reject</Mutate></div></article>)}
+  </>;
+  if (name === 'allRequestsContainer') return <>
     <PageRegions name="listingReview" />
     {collection('requests',ui.data('requests').filter((r) => r.status === 'pending'),(records) => <IncomingCards records={records} registration />)}
     {ui.data('users').filter((u) => u.status === 'pending').map((u) => <article className="request-card" key={u.id}><div><h4>{u.name}</h4><p>{u.role} • {u.email}</p></div><div className="action-btns"><Mutate collection="users" id={u.id} operation="approve">Approve</Mutate><Mutate collection="users" id={u.id} operation="reject">Reject</Mutate></div></article>)}
@@ -155,34 +180,16 @@ export default function PageRegions({ name }) {
   if (name === 'shopManagementTableBody') return collection('products',filterRecords(ui.data('products'),query('shop'),state.filters.shop),(records) => records.map((p) => <tr key={p.id}><td>{p.title}</td><td>{p.category}</td><td>{p.sellerName}</td><td>{money(p.price)}</td><td>{p.quantity}</td><td><span className="status-badge">{p.status}</span></td><td><div className="action-btns"><Action name="showDetail" args={['products',p.id]}>View</Action>{p.status !== 'approved' && <Mutate collection="products" id={p.id} operation="approve">Approve</Mutate>}{p.status !== 'rejected' && <Mutate collection="products" id={p.id} operation="reject">Reject</Mutate>}<Mutate collection="products" id={p.id} operation="delete">Delete</Mutate></div></td></tr>),true);
   if (name === 'verifiedSellersList') return collection('sellers',ui.data('sellers'),(records) => records.map((s) => <article key={s.id} className={`page-record-card seller-record-card status-${s.status}`}><strong>{s.businessName}</strong><p>{s.name} • {s.email} • {s.status}</p><div className="action-btns">{s.status !== 'approved' && <Mutate collection="sellers" id={s.id} operation="approve">Approve Seller</Mutate>}{s.status !== 'rejected' && <Mutate collection="sellers" id={s.id} operation="reject">Reject Seller</Mutate>}</div></article>));
   if (['resOverviewList','resPendingList','resActiveList','resCompletedList','donor-resource-list','orgResourcesTableBody','vol-pickups-list'].includes(name)) {
-    const records = ui.data('resources').filter((r) => name === 'resPendingList' ? r.status === 'submitted' : name === 'resActiveList' ? ['pending_pickup','in_transit'].includes(r.status) : name === 'resCompletedList' ? ['delivered','completed'].includes(r.status) : true);
+    const records = ui.data('resources').filter((r) => name === 'resPendingList' ? r.status === 'submitted' : name === 'resActiveList' ? ['pending_pickup','in_transit'].includes(r.status) : name === 'resCompletedList' ? ['delivered','completed','received'].includes(r.status) : true);
     return collection('resources',records,(records) => <ResourceCards records={records} table={name === 'orgResourcesTableBody'} />,name === 'orgResourcesTableBody');
   }
   if (['hourVerificationList','hour-logs-list'].includes(name)) return collection('hours',ui.data('hours').filter((h) => name === 'hourVerificationList' ? h.status === 'pending' : true),(records) => <HoursCards records={records} review={name === 'hourVerificationList'} />);
-  if (['programApplicationsList','volAppReviewList'].includes(name)) return collection('applications',ui.data('applications').filter((a) => orgPrograms.some((p) => p.id === a.programId)),(records) => <ApplicationCards records={records} />);
+  if (['programApplicationsList','volAppReviewList'].includes(name)) return collection('applications',ui.data('applications'),(records) => <ApplicationCards records={records} />);
   if (['assignments-list','taskApprovalList'].includes(name)) return collection('tasks',ui.data('tasks'),(records) => records.map((t) => <article className="page-record-card" key={t.id}><h4>{t.title}</h4><p>{t.description}</p><p>{t.programName} • {t.assignedToName} • {t.status}</p><div className="page-record-actions"><Action name="showDetail" args={['tasks',t.id]}>Details</Action>{t.status === 'pending' && <Action name="updateTaskStatus" args={[t.id,'in-progress']}>{session?.role === 'volunteer' ? 'Start Task' : 'Approve Task'}</Action>}{t.status === 'in-progress' && <Action name="updateTaskStatus" args={[t.id,session?.role === 'volunteer' ? 'pending_review' : 'completed']}>{session?.role === 'volunteer' ? 'Submit for Review' : 'Mark Complete'}</Action>}{t.status === 'pending_review' && session?.role !== 'volunteer' && <Action name="updateTaskStatus" args={[t.id,'completed']}>Approve Completion</Action>}{t.status !== 'completed' && <Action name="taskNotes" args={[t.id]}>Add Notes</Action>}</div></article>));
-  if (name === 'my-programs-list') return collection('assignments',ui.data('assignments'),(records) => records.map((a) => {
-    const subtasks = ui.data('subtasks').filter((t) => t.programId === a.programId && (session?.role !== 'volunteer' || t.assignedToEmail?.toLowerCase() === session.email.toLowerCase()));
-    const tasks = ui.data('tasks').filter((t) => t.programId === a.programId && (session?.role !== 'volunteer' || t.assignedToEmail?.toLowerCase() === session.email.toLowerCase()));
-    const complete = subtasks.length > 0 && subtasks.every((t) => Number(t.progress) >= 100);
-    const totalWork = tasks.length + subtasks.length;
-    const completedWork = tasks.filter((t) => t.status === 'completed').length + subtasks.filter((t) => Number(t.progress) >= 100).length;
-    const progress = totalWork ? Math.round(completedWork / totalWork * 100) : 0;
-    if (['cancelled','declined'].includes(a.status)) return null;
-    if (a.status === 'pending') return <article className="page-record-card program-invitation-card" key={a.id}><h3>{a.programName}</h3><p>You have been invited to join this program as {a.role}.</p><div className="page-record-actions"><Action name="respondProgramInvitation" args={[a.id,'accepted']}>Accept Invitation</Action><Action name="respondProgramInvitation" args={[a.id,'declined']}>Decline Invitation</Action></div></article>;
-    return <article className={`page-record-card volunteer-program-card status-${a.status}`} key={a.id}>
-      <div className="volunteer-program-card-heading"><div><span className="volunteer-program-label">Active program</span><h3>{a.programName}</h3></div><span className="volunteer-member-badge">{a.role || 'Volunteer'}</span></div>
-      <div className="volunteer-program-progress-label"><span>Work completed</span><strong>{progress}%</strong></div>
-      <div className="volunteer-program-progress-track" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><span style={{ width: `${progress}%` }} /></div>
-      <p className="volunteer-program-work-summary">{totalWork ? `${completedWork} of ${totalWork} assigned ${totalWork === 1 ? 'task' : 'tasks'} completed` : 'No tasks assigned yet. Your organization will add tasks here.'}</p>
-      {tasks.map((t) => <div className="volunteer-program-task" key={t.id}><span>{t.title}</span><span className={`volunteer-task-status status-${t.status}`}>{t.status.replaceAll('_',' ')}</span></div>)}
-      {subtasks.map((t) => <div className="volunteer-program-task" key={t.id}><span>{t.title}</span><span className="volunteer-task-status">{Number(t.progress || 0)}%</span></div>)}
-      <div className="page-record-actions volunteer-program-actions">{subtasks.length > 0 && <Action name="openProgressReport" args={[a.programId]}>Report Progress</Action>}{complete && <Action name="downloadCertificate" args={[a.programId]}>Download Certificate</Action>}</div>
-    </article>;
-  }));
+  if (name === 'my-programs-list') return <ProgramParticipation embedded />;
   if (name === 'portalGrid') {
     const skill = ui.values['portal-skill-filter'], category = ui.values['portal-category-filter'];
-    const records = filterRecords(ui.data('programs'),query('programs')).filter((p) => p.status === 'active' && p.listingStatus === 'approved' && (!skill || skill === 'all' || p.requiredSkills?.includes(skill)) && (!category || category === 'all' || [p.focus].flat().includes(category)));
+    const records = filterRecords(ui.data('programs'),query('programs')).filter((p) => p.status === 'active' && p.openForApplications && (!skill || skill === 'all' || p.requiredSkills?.includes(skill)) && (!category || category === 'all' || [p.focus].flat().includes(category)));
     return collection('programs',records,(records) => <ProgramCards records={records} portal />);
   }
   if (name === 'apply-prog-info') return <><h3>{state.selectedProgram?.name}</h3><p>{state.selectedProgram?.org} • {state.selectedProgram?.location}</p></>;
@@ -194,15 +201,9 @@ export default function PageRegions({ name }) {
     const category = name === 'progCategoryContainer', list = category ? [...new Set([...categories,...state.categories])] : skills, chosen = category ? state.categories : state.programSkills;
     return list.map((label) => <label key={label} className={`program-choice ${category ? 'category-choice' : 'skill-choice'}${chosen.includes(label) ? ' selected' : ''}`}><input type="checkbox" disabled={state.busy} checked={chosen.includes(label)} onChange={(e) => ui.update({ [category ? 'categories' : 'programSkills']: e.target.checked ? [...chosen,label] : chosen.filter((v) => v !== label) })} />{label}</label>);
   }
-  if (name === 'progVolsContainer') {
-    const available = filterRecords(ui.data('volunteers').filter((v) => (v.status || 'active') === 'active'), query('volunteers'));
-    return collection('volunteers',available,(records) => records.map((v) => <label className={`program-volunteer${state.selectedVolunteers.includes(v.email) ? ' selected' : ''}`} key={v.id}>
-      <input type="checkbox" aria-label={v.name} disabled={state.busy || ui.collections.assignments?.loading} checked={state.selectedVolunteers.includes(v.email)} onChange={(e) => ui.update({ selectedVolunteers: e.target.checked ? [...state.selectedVolunteers,v.email] : state.selectedVolunteers.filter((email) => email !== v.email) })} />
-      <span className="program-volunteer-avatar">{v.name.charAt(0)}</span><span className="program-volunteer-copy"><strong>{v.name}</strong><span>{v.email}</span><small>{v.org || 'Independent volunteer'}{v.skills?.length ? ' | '+v.skills.join(', ') : ''}</small></span>
-    </label>),false,'No volunteers match your search. You can create the program and invite volunteers later.');
-  }
+  if (name === 'progVolsContainer') return <VolunteerCandidates />;
   if (name === 'shopProductsGrid') return collection('products',filterRecords(ui.data('products'),query('catalog'),state.filters.catalog),(records) => <ProductCards records={records} />);
-  if (name === 'sellerProductsGrid') return collection('products',ui.data('products').filter((p) => p.sellerId === (ui.data('sellers').find((s) => s.email === session?.email)?.id || session?.id)),(records) => <ProductCards records={records} seller />);
+  if (name === 'sellerProductsGrid') return collection('products',ui.data('products').filter((p) => p.status!=='archived' && p.sellerId === (ui.data('sellers').find((s) => s.email === session?.email)?.id || session?.id)),(records) => <ProductCards records={records} seller />);
   if (name === 'shopDetailContent') return <ProductDetail />;
   if (name === 'checkout-product-details') return <><h3>{state.product?.title}</h3><p>{money(state.product?.price)} each</p></>;
   if (name === 'saved-cards-grid') return ui.savedCards.length ? ui.savedCards.map((c) => <article className="page-record-card" key={c.id}><h3>{c.cardType}</h3><p>•••• •••• •••• {c.cardLast4}</p><p>{c.holder} • {c.expiry}</p><Action name="removeSavedCard" args={[c.id]}>Remove</Action></article>) : <Empty>No saved cards on this browser.</Empty>;
