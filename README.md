@@ -46,8 +46,8 @@ All paths below are relative to `front-end/`.
 
 - Functional components, JSX, component composition, and props.
 - React Router for navigation, redirects, and protected page rendering.
-- Context providers to supply authentication and page data to components.
-- Hooks such as `useState`, `useRef`, `useId`, and `useLayoutEffect` in shared interface components.
+- Redux Toolkit with one entity slice per backend repository; existing contexts adapt Redux selectors and dispatchers to the pages.
+- `useSelector` and `useDispatch` for data and application state; React refs and layout effects for DOM behavior.
 - Conditional rendering based on the current role, route, and application state.
 - Event handling, reusable components, and list rendering with stable keys.
 
@@ -62,3 +62,7 @@ All paths below are relative to `front-end/`.
 - `package.json`, `package-lock.json`, `vite.config.js`, and `eslint.config.js`
 
 The pages use shared action handlers and API services maintained across the team. Frontend route checks complement backend authorization.
+
+## Redux architecture and database persistence
+
+See [REDUX_ARCHITECTURE.md](REDUX_ARCHITECTURE.md) for setup on Node.js 24+, the updated folder structure, all 23 repository-to-slice mappings and exported CRUD thunks, database-first synchronization, refresh behavior, and evaluation checks.

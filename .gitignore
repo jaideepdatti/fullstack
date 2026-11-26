@@ -23,6 +23,9 @@ back-end/logs/
 back-end/uploads/
 back-end/docs/swagger.json
 *.enc
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 *.key
 *.pem
 Thumbs.db

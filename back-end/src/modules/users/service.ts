@@ -10,6 +10,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { StartVerificationDto } from './dto/verification.dto';
+import { VerificationAttemptException } from '../../common/repositories/verification-attempt.exception';
 
 const SECURITY_QUESTIONS = [
   'first_school',
@@ -344,11 +345,11 @@ export class UsersService {
       );
     challenge.attempts += 1;
     if (challenge.attempts > 5)
-      throw new BadRequestException(
+      throw new VerificationAttemptException(
         'Too many incorrect attempts. Request a new code.',
       );
     if (digest(code) !== challenge.codeHash)
-      throw new BadRequestException('The verification code is incorrect.');
+      throw new VerificationAttemptException('The verification code is incorrect.');
     challenge.used = true;
     const token = randomBytes(32).toString('hex');
     this.verifiedRegistrations.push({
